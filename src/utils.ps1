@@ -258,33 +258,27 @@ function New-HASensor {
         [Parameter(Mandatory=$true)] [string] $Name,
         [Parameter(Mandatory=$true)] [string] $UniqueId,
         [Parameter(Mandatory=$true)] [string] $StateTopic,
-        [string] $DeviceClass = "none",
-        [string] $StateClass = "measurement",
+        [string] $DeviceClass = "",
+        [string] $StateClass = "",
         [string] $UnitOfMeasurement = "",
         [int] $SuggestedDisplayPrecision = 1,
-        [hashtable] $Device = @{}
+        [hashtable] $Device = @{},
+        [string] $JsonAttributesTopic = "",
+        [string] $ValueTemplate = ""
     )
     
     $sensor = @{
-        name                     = $Name
-        unique_id                = $UniqueId
-        state_topic              = $StateTopic
-        device_class             = $DeviceClass
-        state_class              = $StateClass
+        name        = $Name
+        unique_id   = $UniqueId
+        state_topic = $StateTopic
     }
-    
-    if ($UnitOfMeasurement) {
-        $sensor["unit_of_measurement"] = $UnitOfMeasurement
-    }
-    
-    if ($SuggestedDisplayPrecision -gt 0) {
-        $sensor["suggested_display_precision"] = $SuggestedDisplayPrecision
-    }
-    
-    if ($Device.Count -gt 0) {
-        $sensor["device"] = $Device
-    }
-    
+    if ($DeviceClass) { $sensor["device_class"] = $DeviceClass }
+    if ($StateClass)  { $sensor["state_class"]  = $StateClass }
+    if ($UnitOfMeasurement) { $sensor["unit_of_measurement"] = $UnitOfMeasurement }
+    if ($SuggestedDisplayPrecision -gt 0) { $sensor["suggested_display_precision"] = $SuggestedDisplayPrecision }
+    if ($Device.Count -gt 0) { $sensor["device"] = $Device }
+    if ($JsonAttributesTopic) { $sensor["json_attributes_topic"] = $JsonAttributesTopic }
+    if ($ValueTemplate) { $sensor["value_template"] = $ValueTemplate }
     return $sensor
 }
 

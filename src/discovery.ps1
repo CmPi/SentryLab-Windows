@@ -33,7 +33,6 @@ $cpuLoadSensor = New-HASensor `
     -Name "CPU Load" `
     -UniqueId "windows_${sanHost}`_cpu_load" `
     -StateTopic "$SYSTEM_TOPIC/cpu_load" `
-    -DeviceClass "none" `
     -StateClass "measurement" `
     -UnitOfMeasurement "%" `
     -SuggestedDisplayPrecision 1 `
@@ -73,9 +72,8 @@ $diskSensor = New-HASensor `
     -Name "Disk Metrics" `
     -UniqueId "windows_${sanHost}`_disk_metrics" `
     -StateTopic "$DISK_TOPIC" `
-    -DeviceClass "none" `
-    -StateClass "measurement" `
-    -UnitOfMeasurement "" `
+    -JsonAttributesTopic "$DISK_TOPIC" `
+    -ValueTemplate "{{ value_json | tojson }}" `
     -SuggestedDisplayPrecision 0 `
     -Device $device
 
@@ -93,9 +91,8 @@ $healthSensor = New-HASensor `
     -Name "Disk Health" `
     -UniqueId "windows_${sanHost}`_disk_health" `
     -StateTopic "$BASE_TOPIC/health" `
-    -DeviceClass "none" `
-    -StateClass "measurement" `
-    -UnitOfMeasurement "" `
+    -JsonAttributesTopic "$BASE_TOPIC/health" `
+    -ValueTemplate "{{ value_json | tojson }}" `
     -SuggestedDisplayPrecision 0 `
     -Device $device
 

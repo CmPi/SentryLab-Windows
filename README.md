@@ -4,7 +4,8 @@ A lightweight PowerShell-based monitoring agent for Windows systems that publish
 
 **Metrics collected:**
 - **CPU Load** — processor utilization (%)
-- **CPU Temperature** — core temperature in °C (via WMI or LibreHardwareMonitor)
+- **CPU Temperature** — core temperature in °C (via WMI or LibreHardwareMonitor; skipped in active cycle if neither is available)
+  - If WMI does not expose a temperature sensor and LibreHardwareMonitor is not configured/reachable, the temp sensor simply does not publish; other sensors still publish.
 - **Disk Usage** — per-drive size, free space, and usage percentage (GB and %)
 
 ## Architecture
@@ -239,7 +240,7 @@ Example: `1.0.363` = v1, this year, day 363
 
 ## Author
 
-CmPi <cmpi@webe.fr>
+CmPi 
 
 ---
 
