@@ -89,6 +89,13 @@ function Publish-MqttRetain {
         return $false
     }
     
+    # DEBUG mode: print instead of publish
+    if ($DEBUG -eq $true) {
+        Write-Host "[DEBUG] RETAIN: $Topic" -ForegroundColor Cyan
+        Write-Host "[DEBUG] Payload: $Payload" -ForegroundColor Cyan
+        return $true
+    }
+    
     try {
         & mosquitto_pub.exe -h $BROKER -p $PORT -u $USER -P $PASS `
                             -t $Topic -m $Payload -r -q 1
@@ -121,6 +128,13 @@ function Publish-MqttNoRetain {
     if ([string]::IsNullOrEmpty($Payload)) {
         Write-Host "[WARNING] MQTT payload is empty for topic: $Topic" -ForegroundColor Yellow
         return $false
+    }
+    
+    # DEBUG mode: print instead of publish
+    if ($DEBUG -eq $true) {
+        Write-Host "[DEBUG] NO-RETAIN: $Topic" -ForegroundColor Cyan
+        Write-Host "[DEBUG] Payload: $Payload" -ForegroundColor Cyan
+        return $true
     }
     
     try {

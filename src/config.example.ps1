@@ -32,6 +32,12 @@ $MQTT_QOS = 1
 $HOST_NAME = $env:COMPUTERNAME
 
 # ==============================================================================
+# DEBUG MODE
+# ==============================================================================
+
+# Set to $true to print topics and payloads instead of publishing
+# Use this to test your configuration before sending data to your MQTT broker
+$DEBUG = $false
 # HOME ASSISTANT DISCOVERY
 # ==============================================================================
 

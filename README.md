@@ -62,18 +62,21 @@ $HOST_NAME = "your-windows-hostname"  # or leave as $env:COMPUTERNAME
 
 Run in PowerShell as Administrator (or regular user if script execution is enabled):
 
+**Important: Test in DEBUG mode first!**
+
 ```powershell
-# Test discovery
+# Edit config.ps1 and set $DEBUG = $true
+notepad config.ps1
+
+# Now run scripts — they will print topics/payloads instead of publishing
 .\discovery.ps1 -Verbose
-
-# Test passive monitoring
 .\monitor-passive.ps1 -Verbose
-
-# Test active monitoring
 .\monitor-active.ps1 -Verbose
+
+# Verify output looks correct, then set $DEBUG = $false in config.ps1 before scheduling
 ```
 
-Check Home Assistant → **Settings** → **Devices & Services** → **MQTT** to verify sensors appear.
+Check Home Assistant → **Settings** → **Devices & Services** → **MQTT** to verify sensors appear (once $DEBUG is false and discovery runs).
 
 ### 4. Schedule with Task Scheduler
 
