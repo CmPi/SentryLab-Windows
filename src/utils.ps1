@@ -449,7 +449,7 @@ function Get-DiskHealth {
             $health["$($diskId)_media_type"] = $disk.MediaType.ToString()
         }
         
-            return ($health | ConvertTo-Json -Depth 2 -Compress)
+        return $health
     }
     catch {
         Write-Host "[WARNING] Failed to get disk health: $_" -ForegroundColor Yellow

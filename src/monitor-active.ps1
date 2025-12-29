@@ -96,7 +96,7 @@ Write-Host "[INFO] Collecting disk health..." -ForegroundColor Gray
 $diskHealth = Get-DiskHealth
 
 if ($diskHealth.Count -gt 0) {
-    $healthPayload = ($diskHealth | ConvertTo-Json -Depth 2)
+    $healthPayload = ($diskHealth | ConvertTo-Json -Depth 2 -Compress)
     $topic = "$BASE_TOPIC/health"
     if (Publish-MqttRetain -Topic $topic -Payload $healthPayload) {
         Write-Host "[OK] Disk health published to $topic" -ForegroundColor Green
