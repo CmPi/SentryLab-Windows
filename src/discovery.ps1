@@ -23,6 +23,7 @@ if ($Verbose) {
 Write-Host "=== SentryLab-Windows MQTT Discovery ===" -ForegroundColor Cyan
 
 $device = New-HADevice
+$sanHost = Sanitize-Token $HOST_NAME
 
 # ==============================================================================
 # CPU LOAD SENSOR
@@ -30,7 +31,7 @@ $device = New-HADevice
 
 $cpuLoadSensor = New-HASensor `
     -Name "CPU Load" `
-    -UniqueId "windows_$HOST_NAME`_cpu_load" `
+    -UniqueId "windows_${sanHost}`_cpu_load" `
     -StateTopic "$SYSTEM_TOPIC/cpu_load" `
     -DeviceClass "none" `
     -StateClass "measurement" `
@@ -38,8 +39,8 @@ $cpuLoadSensor = New-HASensor `
     -SuggestedDisplayPrecision 1 `
     -Device $device
 
-$cpuLoadJson = $cpuLoadSensor | ConvertTo-Json -Depth 6
-$cpuLoadDiscTopic = "$HA_DISCOVERY_PREFIX/sensor/$HOST_NAME/cpu_load/config"
+$cpuLoadJson = $cpuLoadSensor | ConvertTo-Json -Depth 6 -Compress
+$cpuLoadDiscTopic = "$HA_DISCOVERY_PREFIX/sensor/$sanHost/cpu_load/config"
 
 Write-Host "[INFO] Publishing CPU Load discovery to: $cpuLoadDiscTopic"
 Publish-MqttRetain -Topic $cpuLoadDiscTopic -Payload $cpuLoadJson
@@ -50,7 +51,7 @@ Publish-MqttRetain -Topic $cpuLoadDiscTopic -Payload $cpuLoadJson
 
 $cpuTempSensor = New-HASensor `
     -Name "CPU Temperature" `
-    -UniqueId "windows_$HOST_NAME`_cpu_temp" `
+    -UniqueId "windows_${sanHost}`_cpu_temp" `
     -StateTopic "$TEMP_TOPIC/cpu" `
     -DeviceClass "temperature" `
     -StateClass "measurement" `
@@ -58,8 +59,8 @@ $cpuTempSensor = New-HASensor `
     -SuggestedDisplayPrecision 1 `
     -Device $device
 
-$cpuTempJson = $cpuTempSensor | ConvertTo-Json -Depth 6
-$cpuTempDiscTopic = "$HA_DISCOVERY_PREFIX/sensor/$HOST_NAME/cpu_temperature/config"
+$cpuTempJson = $cpuTempSensor | ConvertTo-Json -Depth 6 -Compress
+$cpuTempDiscTopic = "$HA_DISCOVERY_PREFIX/sensor/$sanHost/cpu_temperature/config"
 
 Write-Host "[INFO] Publishing CPU Temperature discovery to: $cpuTempDiscTopic"
 Publish-MqttRetain -Topic $cpuTempDiscTopic -Payload $cpuTempJson
@@ -70,7 +71,7 @@ Publish-MqttRetain -Topic $cpuTempDiscTopic -Payload $cpuTempJson
 
 $diskSensor = New-HASensor `
     -Name "Disk Metrics" `
-    -UniqueId "windows_$HOST_NAME`_disk_metrics" `
+    -UniqueId "windows_${sanHost}`_disk_metrics" `
     -StateTopic "$DISK_TOPIC" `
     -DeviceClass "none" `
     -StateClass "measurement" `
@@ -78,8 +79,8 @@ $diskSensor = New-HASensor `
     -SuggestedDisplayPrecision 0 `
     -Device $device
 
-$diskJson = $diskSensor | ConvertTo-Json -Depth 6
-$diskDiscTopic = "$HA_DISCOVERY_PREFIX/sensor/$HOST_NAME/disk_metrics/config"
+$diskJson = $diskSensor | ConvertTo-Json -Depth 6 -Compress
+$diskDiscTopic = "$HA_DISCOVERY_PREFIX/sensor/$sanHost/disk_metrics/config"
 
 Write-Host "[INFO] Publishing Disk Metrics discovery to: $diskDiscTopic"
 Publish-MqttRetain -Topic $diskDiscTopic -Payload $diskJson
@@ -90,7 +91,7 @@ Publish-MqttRetain -Topic $diskDiscTopic -Payload $diskJson
 
 $healthSensor = New-HASensor `
     -Name "Disk Health" `
-    -UniqueId "windows_$HOST_NAME`_disk_health" `
+    -UniqueId "windows_${sanHost}`_disk_health" `
     -StateTopic "$BASE_TOPIC/health" `
     -DeviceClass "none" `
     -StateClass "measurement" `
@@ -98,8 +99,8 @@ $healthSensor = New-HASensor `
     -SuggestedDisplayPrecision 0 `
     -Device $device
 
-$healthJson = $healthSensor | ConvertTo-Json -Depth 6
-$healthDiscTopic = "$HA_DISCOVERY_PREFIX/sensor/$HOST_NAME/disk_health/config"
+$healthJson = $healthSensor | ConvertTo-Json -Depth 6 -Compress
+$healthDiscTopic = "$HA_DISCOVERY_PREFIX/sensor/$sanHost/disk_health/config"
 
 Write-Host "[INFO] Publishing Disk Health discovery to: $healthDiscTopic"
 Publish-MqttRetain -Topic $healthDiscTopic -Payload $healthJson

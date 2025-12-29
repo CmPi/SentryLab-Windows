@@ -53,6 +53,30 @@ function Load-Config {
         exit 1
     }
     
+    # Promote config variables to script scope so other scripts/functions can access them
+    $varsToPromote = @(
+        'BROKER','PORT','USER','PASS','MQTT_QOS','HOST_NAME','HA_BASE_TOPIC','LibreHardwareMonitorUrl','DEBUG','MosquittoPubPath'
+    )
+    foreach ($v in $varsToPromote) {
+        if (Get-Variable -Name $v -ErrorAction SilentlyContinue) {
+            Set-Variable -Name $v -Value (Get-Variable -Name $v -ValueOnly) -Scope Script
+        }
+    }
+
+    # Ensure sensible defaults
+    if ([string]::IsNullOrWhiteSpace($script:HOST_NAME)) {
+        $script:HOST_NAME = $env:COMPUTERNAME
+        Set-Variable -Name 'HOST_NAME' -Value $script:HOST_NAME -Scope Script
+    }
+    if (-not ($script:MQTT_QOS -is [int]) -or $script:MQTT_QOS -lt 0 -or $script:MQTT_QOS -gt 2) {
+        $script:MQTT_QOS = 1
+        Set-Variable -Name 'MQTT_QOS' -Value $script:MQTT_QOS -Scope Script
+    }
+    if ([string]::IsNullOrWhiteSpace($script:HA_BASE_TOPIC)) {
+        $script:HA_BASE_TOPIC = 'homeassistant'
+        Set-Variable -Name 'HA_BASE_TOPIC' -Value $script:HA_BASE_TOPIC -Scope Script
+    }
+
     Write-Host "[INFO] Configuration loaded successfully"
 }
 
@@ -63,15 +87,83 @@ Load-Config
 # TOPIC CONFIGURATION
 # ==============================================================================
 
-$script:BASE_TOPIC = "windows/$HOST_NAME"
+function Sanitize-Token {
+    param([Parameter(Mandatory=$true)] [string] $Text)
+    $t = $Text.ToLower()
+    # Replace anything not [a-z0-9] with underscore (hyphens included)
+    $t = ($t -replace '[^a-z0-9]', '_')
+    # Collapse multiple underscores, trim edges
+    $t = ($t -replace '_{2,}', '_').Trim('_')
+    if ([string]::IsNullOrWhiteSpace($t)) { return 'unknown' }
+    return $t
+}
+
+$script:SAN_HOST = Sanitize-Token $script:HOST_NAME
+$script:HA_DISCOVERY_PREFIX = if ($HA_BASE_TOPIC) { $HA_BASE_TOPIC } else { "homeassistant" }
+
+$script:BASE_TOPIC = "windows/$SAN_HOST"
 $script:SYSTEM_TOPIC = "$BASE_TOPIC/system"
 $script:TEMP_TOPIC = "$BASE_TOPIC/temp"
 $script:DISK_TOPIC = "$BASE_TOPIC/disks"
-$script:HA_DISCOVERY_PREFIX = $HA_BASE_TOPIC -or "homeassistant"
 
 # ==============================================================================
 # MQTT PUBLISHING FUNCTIONS
 # ==============================================================================
+
+function Resolve-MosquittoPub {
+    <#
+    .SYNOPSIS
+    Resolves the full path to mosquitto_pub.exe using config override, PATH, or common install locations.
+    .OUTPUTS
+    Sets $script:MOSQUITTO_PUB to an executable path or the literal "mosquitto_pub.exe" to rely on PATH.
+    #>
+    try {
+        # Config override (optional): $MosquittoPubPath in config.ps1
+        if (Get-Variable -Name MosquittoPubPath -ErrorAction SilentlyContinue) {
+            $candidate = $MosquittoPubPath
+            if (-not [string]::IsNullOrEmpty($candidate) -and (Test-Path $candidate)) {
+                $script:MOSQUITTO_PUB = $candidate
+                Write-Host "[INFO] Using mosquitto_pub (config): $script:MOSQUITTO_PUB" -ForegroundColor Gray
+                return
+            }
+        }
+
+        # Try PATH
+        $cmd = Get-Command mosquitto_pub.exe -ErrorAction SilentlyContinue
+        if ($cmd -and $cmd.Source) {
+            $script:MOSQUITTO_PUB = $cmd.Source
+            Write-Host "[INFO] Using mosquitto_pub (PATH): $script:MOSQUITTO_PUB" -ForegroundColor Gray
+            return
+        }
+
+        # Common install locations
+        $commonPaths = @(
+            "$env:ProgramFiles\mosquitto\mosquitto_pub.exe",
+            "$env:ProgramFiles(x86)\mosquitto\mosquitto_pub.exe",
+            "C:\\mosquitto\\mosquitto_pub.exe",
+            (Join-Path (Split-Path $PSCommandPath) "mosquitto_pub.exe")
+        )
+
+        foreach ($p in $commonPaths) {
+            if (Test-Path $p) {
+                $script:MOSQUITTO_PUB = $p
+                Write-Host "[INFO] Using mosquitto_pub (found): $script:MOSQUITTO_PUB" -ForegroundColor Gray
+                return
+            }
+        }
+
+        # Fallback: rely on PATH
+        $script:MOSQUITTO_PUB = "mosquitto_pub.exe"
+        Write-Host "[WARNING] mosquitto_pub.exe not found; relying on PATH" -ForegroundColor Yellow
+    }
+    catch {
+        $script:MOSQUITTO_PUB = "mosquitto_pub.exe"
+        Write-Host "[WARNING] Error resolving mosquitto_pub; relying on PATH: $_" -ForegroundColor Yellow
+    }
+}
+
+# Resolve mosquitto_pub path on load
+Resolve-MosquittoPub
 
 function Publish-MqttRetain {
     param(
@@ -97,8 +189,9 @@ function Publish-MqttRetain {
     }
     
     try {
-        & mosquitto_pub.exe -h $BROKER -p $PORT -u $USER -P $PASS `
-                            -t $Topic -m $Payload -r -q 1
+        $qos = if ($MQTT_QOS -is [int] -and $MQTT_QOS -ge 0 -and $MQTT_QOS -le 2) { $MQTT_QOS } else { 1 }
+        & $script:MOSQUITTO_PUB -h $BROKER -p $PORT -u $USER -P $PASS `
+                            -t $Topic -m $Payload -r -q $qos
         
         if ($LASTEXITCODE -eq 0) {
             Write-Host "[DEBUG] Published (Retain) to $Topic" -ForegroundColor Gray
@@ -138,8 +231,9 @@ function Publish-MqttNoRetain {
     }
     
     try {
-        & mosquitto_pub.exe -h $BROKER -p $PORT -u $USER -P $PASS `
-                            -t $Topic -m $Payload -q 1
+        $qos = if ($MQTT_QOS -is [int] -and $MQTT_QOS -ge 0 -and $MQTT_QOS -le 2) { $MQTT_QOS } else { 1 }
+        & $script:MOSQUITTO_PUB -h $BROKER -p $PORT -u $USER -P $PASS `
+                            -t $Topic -m $Payload -q $qos
         
         if ($LASTEXITCODE -eq 0) {
             Write-Host "[DEBUG] Published (No-Retain) to $Topic" -ForegroundColor Gray
@@ -196,7 +290,7 @@ function New-HASensor {
 
 function New-HADevice {
     return @{
-        identifiers  = @("windows_$HOST_NAME")
+        identifiers  = @("windows_$script:SAN_HOST")
         name         = $HOST_NAME
         manufacturer = "Microsoft"
         model        = "Windows"
@@ -219,7 +313,16 @@ function Get-CpuLoad {
         return [math]::Round($cpuLoad, 1)
     }
     catch {
-        Write-Host "[ERROR] Failed to get CPU load: $_" -ForegroundColor Red
+        # Fallback to CIM performance data
+        try {
+            $cpu = Get-CimInstance Win32_PerfFormattedData_PerfOS_Processor -ErrorAction Stop | Where-Object { $_.Name -eq '_Total' }
+            if ($cpu) {
+                return [math]::Round([double]$cpu.PercentProcessorTime, 1)
+            }
+        }
+        catch {
+            Write-Host "[ERROR] Failed to get CPU load: $_" -ForegroundColor Red
+        }
         return $null
     }
 }
@@ -315,13 +418,15 @@ function Build-DiskPayload {
     
     $payload = @{}
     foreach ($disk in $Disks) {
-        $prefix = "$($disk.Drive)_$($disk.Label)"
+        $drive = Sanitize-Token ($disk.Drive)
+        $label = Sanitize-Token ($disk.Label)
+        $prefix = "${drive}_${label}"
         $payload["$($prefix)_size_bytes"] = $disk.SizeBytes
         $payload["$($prefix)_free_bytes"] = $disk.FreeBytes
         $payload["$($prefix)_used_bytes"] = $disk.UsedBytes
         $payload["$($prefix)_used_percent"] = $disk.UsedPercent
     }
-    return ($payload | ConvertTo-Json -Depth 2)
+        return ($payload | ConvertTo-Json -Depth 2 -Compress)
 }
 
 function Get-DiskHealth {
@@ -336,15 +441,15 @@ function Get-DiskHealth {
         $health = @{}
         
         foreach ($disk in $disks) {
-            $diskId = "$($disk.FriendlyName)_Slot$($disk.SlotNumber)"
-            $diskId = $diskId -replace '[^a-zA-Z0-9_]', ''
+            $diskId = "$($disk.FriendlyName)_slot$($disk.SlotNumber)"
+            $diskId = Sanitize-Token $diskId
             
             $health["$($diskId)_health"] = $disk.HealthStatus.ToString()
             $health["$($diskId)_operational_status"] = $disk.OperationalStatus.ToString()
             $health["$($diskId)_media_type"] = $disk.MediaType.ToString()
         }
         
-        return $health
+            return ($health | ConvertTo-Json -Depth 2 -Compress)
     }
     catch {
         Write-Host "[WARNING] Failed to get disk health: $_" -ForegroundColor Yellow
@@ -352,16 +457,5 @@ function Get-DiskHealth {
     }
 }
 
-# Export functions
-Export-ModuleMember -Function @(
-    'Load-Config',
-    'Publish-MqttRetain',
-    'Publish-MqttNoRetain',
-    'New-HASensor',
-    'New-HADevice',
-    'Get-CpuLoad',
-    'Get-CpuTemperature',
-    'Get-DiskMetrics',
-    'Build-DiskPayload',
-    'Get-DiskHealth'
-)
+# Note: This file is dot-sourced by scripts, not imported as a module.
+# Do not call Export-ModuleMember here.

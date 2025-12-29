@@ -8,6 +8,8 @@
 # @notes Collects all metrics: CPU load, CPU temperature, disk usage
 #        Publish with retain flag for persistence
 #        Typically run on schedule (e.g., Task Scheduler every 5-10 minutes)
+#        mosquitto_pub detection & override: see README → "MQTT Publisher (mosquitto_pub)"
+#        You can set $MosquittoPubPath in config.ps1 and tune $MQTT_QOS
 #
 
 param(

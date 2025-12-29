@@ -33,6 +33,26 @@ src/
 3. **MQTT Broker** — e.g., Home Assistant's built-in MQTT or separate Mosquitto instance
 4. **Home Assistant** (optional but recommended) — for visualization and automation
 
+  ## MQTT Publisher (mosquitto_pub)
+
+  This project only needs the `mosquitto_pub` client (no service). The scripts auto-detect its location in this order:
+
+  - Config override: `$MosquittoPubPath` in `src/config.ps1`
+  - Available on `PATH`
+  - Common locations: `C:\Program Files\mosquitto\mosquitto_pub.exe`, `C:\mosquitto\mosquitto_pub.exe`
+  - Script directory (if placed alongside `utils.ps1`)
+
+  If none are found, the scripts fall back to `mosquitto_pub.exe` and rely on `PATH`.
+
+  Optional override in `config.ps1`:
+
+  ```powershell
+  # Use a specific mosquitto_pub path
+  $MosquittoPubPath = "C:\Program Files\mosquitto\mosquitto_pub.exe"
+  ```
+
+  You can also adjust MQTT QoS via `$MQTT_QOS` (default: 1). Both retained and non-retained publishes respect this setting.
+
 ## Installation
 
 ### 1. Clone or Download
