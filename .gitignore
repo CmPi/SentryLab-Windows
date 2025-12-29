@@ -1,0 +1,24 @@
+# SentryLab-Windows .gitignore
+
+# Configuration with credentials (use config.example.ps1 instead)
+src/config.ps1
+
+# PowerShell
+*.ps1~ 
+*.psc1
+*.psd1
+
+# Windows
+Thumbs.db
+*.lnk
+.DS_Store
+
+# Logs
+*.log
+logs/
+
+# IDE
+.vscode/
+*.swp
+*.swo
+*~
