@@ -1,2 +1,222 @@
 # SentryLab-Windows
-A lightweight monitoring solution for Windows. Reports CPU, SMART discs status to Home Assistant via MQTT.
+
+A lightweight PowerShell-based monitoring agent for Windows systems that publishes metrics to MQTT and integrates seamlessly with Home Assistant.
+
+**Metrics collected:**
+- **CPU Load** — processor utilization (%)
+- **CPU Temperature** — core temperature in °C (via WMI or LibreHardwareMonitor)
+- **Disk Usage** — per-drive size, free space, and usage percentage (GB and %)
+
+## Architecture
+
+```
+src/
+  config.ps1          — Configuration (MQTT broker, credentials, etc.)
+  utils.ps1           — Shared utilities (MQTT publish, metrics collection)
+  discovery.ps1       — Home Assistant MQTT Discovery registration
+  monitor-passive.ps1 — Lightweight metrics (CPU load + disk usage)
+  monitor-active.ps1  — Full metrics (CPU load + temperature + disk usage)
+```
+
+### Monitoring Modes
+
+- **Passive** (3–5 min cadence): CPU load + disk metrics. Fast, minimal overhead. Skips CPU temperature.
+- **Active** (15–30 min cadence): Full collection including CPU temperature (more expensive on some hardware).
+- **Discovery** (once at startup): Publishes sensor metadata to Home Assistant MQTT Discovery.
+
+## Prerequisites
+
+1. **PowerShell 5.0 or higher** (Windows 10/Server 2016+)
+2. **mosquitto_pub.exe** — MQTT CLI tool
+   - Download: https://mosquitto.org/download/
+   - Install to `C:\Program Files\mosquitto\` (or adjust path in scripts)
+3. **MQTT Broker** — e.g., Home Assistant's built-in MQTT or separate Mosquitto instance
+4. **Home Assistant** (optional but recommended) — for visualization and automation
+
+## Installation
+
+### 1. Clone or Download
+
+```powershell
+git clone https://github.com/your-org/SentryLab-Windows.git
+cd SentryLab-Windows\src
+```
+
+### 2. Edit Configuration
+
+```powershell
+# Edit config.ps1 with your MQTT broker details
+notepad config.ps1
+```
+
+Update:
+```powershell
+$BROKER = "your-mqtt-broker-ip-or-hostname"
+$PORT = 1883
+$USER = "sentrylab"
+$PASS = "your-secure-password"
+$HOST_NAME = "your-windows-hostname"  # or leave as $env:COMPUTERNAME
+```
+
+### 3. Test Scripts
+
+Run in PowerShell as Administrator (or regular user if script execution is enabled):
+
+```powershell
+# Test discovery
+.\discovery.ps1 -Verbose
+
+# Test passive monitoring
+.\monitor-passive.ps1 -Verbose
+
+# Test active monitoring
+.\monitor-active.ps1 -Verbose
+```
+
+Check Home Assistant → **Settings** → **Devices & Services** → **MQTT** to verify sensors appear.
+
+### 4. Schedule with Task Scheduler
+
+**Option A: GUI**
+
+1. Open Task Scheduler (`tasksched.msc`)
+2. Create a new task:
+   - **Name**: SentryLab-Windows Passive
+   - **Trigger**: Recurring, every 5 minutes
+   - **Action**: Start a program
+     - Program: `C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe`
+     - Arguments: `-NoProfile -ExecutionPolicy Bypass -File "C:\path\to\SentryLab-Windows\src\monitor-passive.ps1"`
+   - **Run with highest privileges**: Yes (if needed for CPU temp)
+
+3. Create another task for active monitoring:
+   - **Trigger**: Recurring, every 30 minutes (or daily)
+   - **Action**: Same, but `monitor-active.ps1`
+
+4. Create a one-time task for discovery (on login or startup):
+   - **Trigger**: At startup
+   - **Action**: Same, but `discovery.ps1`
+
+**Option B: PowerShell Script**
+
+```powershell
+# Run as Administrator
+
+$scriptPath = "C:\path\to\SentryLab-Windows\src"
+
+# Passive task
+$trigger = New-ScheduledTaskTrigger -RepetitionInterval (New-TimeSpan -Minutes 5) -Once -At (Get-Date)
+$action = New-ScheduledTaskAction -Execute "powershell.exe" `
+    -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$scriptPath\monitor-passive.ps1`""
+Register-ScheduledTask -TaskName "SentryLab-Passive" -Trigger $trigger -Action $action -RunLevel Highest
+
+# Active task
+$trigger = New-ScheduledTaskTrigger -RepetitionInterval (New-TimeSpan -Minutes 30) -Once -At (Get-Date)
+$action = New-ScheduledTaskAction -Execute "powershell.exe" `
+    -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$scriptPath\monitor-active.ps1`""
+Register-ScheduledTask -TaskName "SentryLab-Active" -Trigger $trigger -Action $action -RunLevel Highest
+
+# Discovery task (one-time at startup)
+$trigger = New-ScheduledTaskTrigger -AtStartup
+$action = New-ScheduledTaskAction -Execute "powershell.exe" `
+    -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$scriptPath\discovery.ps1`""
+Register-ScheduledTask -TaskName "SentryLab-Discovery" -Trigger $trigger -Action $action -RunLevel Highest
+```
+
+## MQTT Topics
+
+Topics are published under the base: `windows/<HOST_NAME>`
+
+| Metric | Topic | Example |
+|--------|-------|---------|
+| CPU Load | `windows/<host>/cpu/load` | `windows/DESKTOP-ABC/cpu/load` → `42.5` |
+| CPU Temperature | `windows/<host>/cpu/temperature` | `windows/DESKTOP-ABC/cpu/temperature` → `65.3` |
+| Disk Size | `windows/<host>/disks/<letter>/size` | `windows/DESKTOP-ABC/disks/C/size` → `476.94` |
+| Disk Free | `windows/<host>/disks/<letter>/free` | `windows/DESKTOP-ABC/disks/C/free` → `125.67` |
+| Disk Used % | `windows/<host>/disks/<letter>/used_percent` | `windows/DESKTOP-ABC/disks/C/used_percent` → `73.6` |
+
+## Home Assistant Integration
+
+### Manual Setup (if MQTT Discovery doesn't work)
+
+1. Add to `configuration.yaml`:
+
+```yaml
+mqtt:
+  sensor:
+    - name: "Windows CPU Load"
+      state_topic: "windows/DESKTOP-ABC/cpu/load"
+      unit_of_measurement: "%"
+      state_class: measurement
+      
+    - name: "Windows CPU Temperature"
+      state_topic: "windows/DESKTOP-ABC/cpu/temperature"
+      unit_of_measurement: "°C"
+      device_class: temperature
+      state_class: measurement
+      
+    - name: "Windows Disk C Free"
+      state_topic: "windows/DESKTOP-ABC/disks/C/free"
+      unit_of_measurement: "GB"
+      state_class: measurement
+```
+
+2. Restart Home Assistant
+
+### Automatic (via MQTT Discovery)
+
+Run `discovery.ps1` and sensors will appear under **Settings** → **Devices & Services** → **MQTT**.
+
+## Troubleshooting
+
+### Scripts won't run
+
+```powershell
+# Allow script execution (run as Administrator)
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+```
+
+### mosquitto_pub not found
+
+Install Mosquitto and add to PATH, or adjust path in `utils.ps1`:
+
+```powershell
+$mosquittoPath = "C:\Program Files\mosquitto\mosquitto_pub.exe"
+& $mosquittoPath ... # Use full path instead of just mosquitto_pub.exe
+```
+
+### CPU temperature always null
+
+WMI doesn't expose temperature on all systems. Options:
+
+1. Install **LibreHardwareMonitor** and configure its URL in `config.ps1`
+2. Use a hardware-specific monitoring tool (NVIDIA, AMD drivers, etc.)
+3. Accept that passive mode won't include temperature
+
+### MQTT publish fails
+
+- Verify broker IP, port, username, password in `config.ps1`
+- Test connectivity: `Test-NetConnection -ComputerName <broker> -Port 1883`
+- Check broker logs for authentication errors
+
+## Versioning
+
+Follows semantic versioning: `X.Y.Z`
+- **X**: Major version (feature/API changes)
+- **Y**: Year offset (0 = current year, 1 = next year, etc.)
+- **Z**: Day of year (1–366)
+
+Example: `1.0.363` = v1, this year, day 363
+
+## Author
+
+CmPi <cmpi@webe.fr>
+
+---
+
+**Quick Start:**
+```powershell
+cd C:\path\to\SentryLab-Windows\src
+notepad config.ps1  # Edit MQTT details
+.\discovery.ps1     # Register sensors with HA
+# Then set up Task Scheduler tasks (see above)
+```
