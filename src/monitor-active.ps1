@@ -32,7 +32,7 @@ $failCount = 0
 Write-Host "[INFO] Collecting CPU load..." -ForegroundColor Gray
 $cpuLoad = Get-CpuLoad
 if ($cpuLoad -ne $null) {
-    $topic = "$CPU_TOPIC/load"
+    $topic = "$SYSTEM_TOPIC/cpu_load"
     if (Publish-MqttRetain -Topic $topic -Payload $cpuLoad.ToString()) {
         Write-Host "[OK] CPU load: $cpuLoad %" -ForegroundColor Green
         $successCount++
@@ -52,7 +52,7 @@ if ($cpuLoad -ne $null) {
 Write-Host "[INFO] Collecting CPU temperature..." -ForegroundColor Gray
 $cpuTemp = Get-CpuTemperature
 if ($cpuTemp -ne $null) {
-    $topic = "$CPU_TOPIC/temperature"
+    $topic = "$TEMP_TOPIC/cpu"
     if (Publish-MqttRetain -Topic $topic -Payload $cpuTemp.ToString()) {
         Write-Host "[OK] CPU temperature: $cpuTemp °C" -ForegroundColor Green
         $successCount++
@@ -65,37 +65,46 @@ if ($cpuTemp -ne $null) {
 }
 
 # ==============================================================================
-# DISK METRICS
+# DISK METRICS (single JSON object)
 # ==============================================================================
 
 Write-Host "[INFO] Collecting disk metrics..." -ForegroundColor Gray
 $disks = Get-DiskMetrics
 
 if ($disks.Count -gt 0) {
-    foreach ($disk in $disks) {
-        $driveLetter = $disk.Drive.Replace(':', '')
-        
-        # Disk Size (published once, relatively static)
-        $sizeTopics = @(
-            @{ Topic = "$DISK_TOPIC/$driveLetter/size"; Payload = $disk.SizeGB.ToString() }
-            @{ Topic = "$DISK_TOPIC/$driveLetter/free"; Payload = $disk.FreeGB.ToString() }
-            @{ Topic = "$DISK_TOPIC/$driveLetter/used"; Payload = $disk.UsedGB.ToString() }
-            @{ Topic = "$DISK_TOPIC/$driveLetter/used_percent"; Payload = $disk.UsedPercent.ToString() }
-        )
-        
-        foreach ($pub in $sizeTopics) {
-            if (Publish-MqttRetain -Topic $pub.Topic -Payload $pub.Payload) {
-                Write-Host "[OK] $($pub.Topic) = $($pub.Payload)" -ForegroundColor Green
-                $successCount++
-            } else {
-                Write-Host "[ERROR] Failed to publish $($pub.Topic)" -ForegroundColor Red
-                $failCount++
-            }
-        }
+    $diskPayload = Build-DiskPayload -Disks $disks
+    $topic = "$DISK_TOPIC"
+    if (Publish-MqttRetain -Topic $topic -Payload $diskPayload) {
+        Write-Host "[OK] Disk metrics published to $topic" -ForegroundColor Green
+        $successCount++
+    } else {
+        Write-Host "[ERROR] Failed to publish disk metrics" -ForegroundColor Red
+        $failCount++
     }
 } else {
     Write-Host "[ERROR] No disk metrics collected" -ForegroundColor Red
     $failCount++
+}
+
+# ==============================================================================
+# DISK HEALTH (physical disk status via Get-PhysicalDisk)
+# ==============================================================================
+
+Write-Host "[INFO] Collecting disk health..." -ForegroundColor Gray
+$diskHealth = Get-DiskHealth
+
+if ($diskHealth.Count -gt 0) {
+    $healthPayload = ($diskHealth | ConvertTo-Json -Depth 2)
+    $topic = "$BASE_TOPIC/health"
+    if (Publish-MqttRetain -Topic $topic -Payload $healthPayload) {
+        Write-Host "[OK] Disk health published to $topic" -ForegroundColor Green
+        $successCount++
+    } else {
+        Write-Host "[ERROR] Failed to publish disk health" -ForegroundColor Red
+        $failCount++
+    }
+} else {
+    Write-Host "[WARNING] No physical disk health data available" -ForegroundColor Yellow
 }
 
 # ==============================================================================

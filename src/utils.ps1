@@ -65,7 +65,7 @@ Load-Config
 
 $script:BASE_TOPIC = "windows/$HOST_NAME"
 $script:SYSTEM_TOPIC = "$BASE_TOPIC/system"
-$script:CPU_TOPIC = "$BASE_TOPIC/cpu"
+$script:TEMP_TOPIC = "$BASE_TOPIC/temp"
 $script:DISK_TOPIC = "$BASE_TOPIC/disks"
 $script:HA_DISCOVERY_PREFIX = $HA_BASE_TOPIC -or "homeassistant"
 
@@ -251,25 +251,32 @@ function Get-DiskMetrics {
     .SYNOPSIS
     Gets disk usage metrics for all fixed logical drives
     .OUTPUTS
-    Array of PSCustomObject with Drive, SizeGB, FreeGB, UsedGB, UsedPercent
+    Array of PSCustomObject with Drive, Label, SizeBytes, FreeBytes, UsedBytes, UsedPercent
     #>
     try {
         $disks = Get-CimInstance Win32_LogicalDisk -Filter "DriveType=3" -ErrorAction Stop
         $metrics = foreach ($disk in $disks) {
-            $sizeGB = [math]::Round($disk.Size / 1GB, 2)
-            $freeGB = [math]::Round($disk.FreeSpace / 1GB, 2)
-            $usedGB = [math]::Round(($disk.Size - $disk.FreeSpace) / 1GB, 2)
+            $sizeBytes = $disk.Size
+            $freeBytes = $disk.FreeSpace
+            $usedBytes = $disk.Size - $disk.FreeSpace
             $usedPct = if ($disk.Size -gt 0) { 
                 [math]::Round((($disk.Size - $disk.FreeSpace) / $disk.Size) * 100, 1) 
             } else { 
                 0 
             }
             
+            # Get volume label (friendly name)
+            $label = if ($disk.VolumeName) { $disk.VolumeName } else { "Drive" }
+            # Sanitize label (remove spaces, special chars)
+            $label = $label -replace '[^a-zA-Z0-9_]', ''
+            if ([string]::IsNullOrEmpty($label)) { $label = "Drive" }
+            
             [PSCustomObject]@{
-                Drive       = $disk.DeviceID.TrimEnd('\')
-                SizeGB      = $sizeGB
-                FreeGB      = $freeGB
-                UsedGB      = $usedGB
+                Drive      = $disk.DeviceID.TrimEnd(':\')
+                Label      = $label
+                SizeBytes  = $sizeBytes
+                FreeBytes  = $freeBytes
+                UsedBytes  = $usedBytes
                 UsedPercent = $usedPct
             }
         }
@@ -278,6 +285,56 @@ function Get-DiskMetrics {
     catch {
         Write-Host "[ERROR] Failed to get disk metrics: $_" -ForegroundColor Red
         return @()
+    }
+}
+
+function Build-DiskPayload {
+    <#
+    .SYNOPSIS
+    Builds a single JSON payload with all disk metrics (letter_label_metric format)
+    .PARAMETER Disks
+    Array of disk metrics from Get-DiskMetrics
+    .OUTPUTS
+    JSON string
+    #>
+    param([Parameter(Mandatory=$true)] [array] $Disks)
+    
+    $payload = @{}
+    foreach ($disk in $Disks) {
+        $prefix = "$($disk.Drive)_$($disk.Label)"
+        $payload["$($prefix)_size_bytes"] = $disk.SizeBytes
+        $payload["$($prefix)_free_bytes"] = $disk.FreeBytes
+        $payload["$($prefix)_used_bytes"] = $disk.UsedBytes
+        $payload["$($prefix)_used_percent"] = $disk.UsedPercent
+    }
+    return ($payload | ConvertTo-Json -Depth 2)
+}
+
+function Get-DiskHealth {
+    <#
+    .SYNOPSIS
+    Gets physical disk health status via Get-PhysicalDisk
+    .OUTPUTS
+    Hashtable with disk health info (name_health, name_operational_status, name_media_type)
+    #>
+    try {
+        $disks = Get-PhysicalDisk -ErrorAction Stop
+        $health = @{}
+        
+        foreach ($disk in $disks) {
+            $diskId = "$($disk.FriendlyName)_Slot$($disk.SlotNumber)"
+            $diskId = $diskId -replace '[^a-zA-Z0-9_]', ''
+            
+            $health["$($diskId)_health"] = $disk.HealthStatus.ToString()
+            $health["$($diskId)_operational_status"] = $disk.OperationalStatus.ToString()
+            $health["$($diskId)_media_type"] = $disk.MediaType.ToString()
+        }
+        
+        return $health
+    }
+    catch {
+        Write-Host "[WARNING] Failed to get disk health: $_" -ForegroundColor Yellow
+        return @{}
     }
 }
 
@@ -290,5 +347,7 @@ Export-ModuleMember -Function @(
     'New-HADevice',
     'Get-CpuLoad',
     'Get-CpuTemperature',
-    'Get-DiskMetrics'
+    'Get-DiskMetrics',
+    'Build-DiskPayload',
+    'Get-DiskHealth'
 )

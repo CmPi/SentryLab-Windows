@@ -31,7 +31,7 @@ $device = New-HADevice
 $cpuLoadSensor = New-HASensor `
     -Name "CPU Load" `
     -UniqueId "windows_$HOST_NAME`_cpu_load" `
-    -StateTopic "$CPU_TOPIC/load" `
+    -StateTopic "$SYSTEM_TOPIC/cpu_load" `
     -DeviceClass "none" `
     -StateClass "measurement" `
     -UnitOfMeasurement "%" `
@@ -51,7 +51,7 @@ Publish-MqttRetain -Topic $cpuLoadDiscTopic -Payload $cpuLoadJson
 $cpuTempSensor = New-HASensor `
     -Name "CPU Temperature" `
     -UniqueId "windows_$HOST_NAME`_cpu_temp" `
-    -StateTopic "$CPU_TOPIC/temperature" `
+    -StateTopic "$TEMP_TOPIC/cpu" `
     -DeviceClass "temperature" `
     -StateClass "measurement" `
     -UnitOfMeasurement "°C" `
@@ -65,65 +65,44 @@ Write-Host "[INFO] Publishing CPU Temperature discovery to: $cpuTempDiscTopic"
 Publish-MqttRetain -Topic $cpuTempDiscTopic -Payload $cpuTempJson
 
 # ==============================================================================
-# DISK SENSORS (per drive)
+# DISK METRICS (single JSON sensor with all drives)
 # ==============================================================================
 
-$disks = Get-DiskMetrics
+$diskSensor = New-HASensor `
+    -Name "Disk Metrics" `
+    -UniqueId "windows_$HOST_NAME`_disk_metrics" `
+    -StateTopic "$DISK_TOPIC" `
+    -DeviceClass "none" `
+    -StateClass "measurement" `
+    -UnitOfMeasurement "" `
+    -SuggestedDisplayPrecision 0 `
+    -Device $device
 
-foreach ($disk in $disks) {
-    $driveLetter = $disk.Drive.Replace(':', '')
-    
-    # Disk Size
-    $diskSizeSensor = New-HASensor `
-        -Name "Disk $driveLetter Size" `
-        -UniqueId "windows_$HOST_NAME`_disk_$driveLetter`_size" `
-        -StateTopic "$DISK_TOPIC/$driveLetter/size" `
-        -DeviceClass "none" `
-        -StateClass "measurement" `
-        -UnitOfMeasurement "GB" `
-        -SuggestedDisplayPrecision 2 `
-        -Device $device
-    
-    $diskSizeJson = $diskSizeSensor | ConvertTo-Json -Depth 6
-    $diskSizeDiscTopic = "$HA_DISCOVERY_PREFIX/sensor/$HOST_NAME/disk_$($driveLetter)_size/config"
-    
-    Write-Host "[INFO] Publishing Disk $driveLetter Size discovery"
-    Publish-MqttRetain -Topic $diskSizeDiscTopic -Payload $diskSizeJson
-    
-    # Disk Free
-    $diskFreeSensor = New-HASensor `
-        -Name "Disk $driveLetter Free" `
-        -UniqueId "windows_$HOST_NAME`_disk_$driveLetter`_free" `
-        -StateTopic "$DISK_TOPIC/$driveLetter/free" `
-        -DeviceClass "none" `
-        -StateClass "measurement" `
-        -UnitOfMeasurement "GB" `
-        -SuggestedDisplayPrecision 2 `
-        -Device $device
-    
-    $diskFreeJson = $diskFreeSensor | ConvertTo-Json -Depth 6
-    $diskFreeDiscTopic = "$HA_DISCOVERY_PREFIX/sensor/$HOST_NAME/disk_$($driveLetter)_free/config"
-    
-    Write-Host "[INFO] Publishing Disk $driveLetter Free discovery"
-    Publish-MqttRetain -Topic $diskFreeDiscTopic -Payload $diskFreeJson
-    
-    # Disk Used Percent
-    $diskUsedPctSensor = New-HASensor `
-        -Name "Disk $driveLetter Used %" `
-        -UniqueId "windows_$HOST_NAME`_disk_$driveLetter`_used_pct" `
-        -StateTopic "$DISK_TOPIC/$driveLetter/used_percent" `
-        -DeviceClass "none" `
-        -StateClass "measurement" `
-        -UnitOfMeasurement "%" `
-        -SuggestedDisplayPrecision 1 `
-        -Device $device
-    
-    $diskUsedPctJson = $diskUsedPctSensor | ConvertTo-Json -Depth 6
-    $diskUsedPctDiscTopic = "$HA_DISCOVERY_PREFIX/sensor/$HOST_NAME/disk_$($driveLetter)_used_pct/config"
-    
-    Write-Host "[INFO] Publishing Disk $driveLetter Used % discovery"
-    Publish-MqttRetain -Topic $diskUsedPctDiscTopic -Payload $diskUsedPctJson
-}
+$diskJson = $diskSensor | ConvertTo-Json -Depth 6
+$diskDiscTopic = "$HA_DISCOVERY_PREFIX/sensor/$HOST_NAME/disk_metrics/config"
+
+Write-Host "[INFO] Publishing Disk Metrics discovery to: $diskDiscTopic"
+Publish-MqttRetain -Topic $diskDiscTopic -Payload $diskJson
+
+# ==============================================================================
+# DISK HEALTH SENSOR
+# ==============================================================================
+
+$healthSensor = New-HASensor `
+    -Name "Disk Health" `
+    -UniqueId "windows_$HOST_NAME`_disk_health" `
+    -StateTopic "$BASE_TOPIC/health" `
+    -DeviceClass "none" `
+    -StateClass "measurement" `
+    -UnitOfMeasurement "" `
+    -SuggestedDisplayPrecision 0 `
+    -Device $device
+
+$healthJson = $healthSensor | ConvertTo-Json -Depth 6
+$healthDiscTopic = "$HA_DISCOVERY_PREFIX/sensor/$HOST_NAME/disk_health/config"
+
+Write-Host "[INFO] Publishing Disk Health discovery to: $healthDiscTopic"
+Publish-MqttRetain -Topic $healthDiscTopic -Payload $healthJson
 
 Write-Host "[INFO] Discovery complete" -ForegroundColor Green
 exit 0

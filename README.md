@@ -126,13 +126,20 @@ Register-ScheduledTask -TaskName "SentryLab-Discovery" -Trigger $trigger -Action
 
 Topics are published under the base: `windows/<HOST_NAME>`
 
-| Metric | Topic | Example |
-|--------|-------|---------|
-| CPU Load | `windows/<host>/cpu/load` | `windows/DESKTOP-ABC/cpu/load` → `42.5` |
-| CPU Temperature | `windows/<host>/cpu/temperature` | `windows/DESKTOP-ABC/cpu/temperature` → `65.3` |
-| Disk Size | `windows/<host>/disks/<letter>/size` | `windows/DESKTOP-ABC/disks/C/size` → `476.94` |
-| Disk Free | `windows/<host>/disks/<letter>/free` | `windows/DESKTOP-ABC/disks/C/free` → `125.67` |
-| Disk Used % | `windows/<host>/disks/<letter>/used_percent` | `windows/DESKTOP-ABC/disks/C/used_percent` → `73.6` |
+| Metric | Topic | Payload Example |
+|--------|-------|-----------------|
+| CPU Load | `windows/<host>/system/cpu_load` | `42.5` |
+| CPU Temperature | `windows/<host>/temp/cpu` | `65.3` |
+| Disk Metrics | `windows/<host>/disks` | `{ "C_SystemDrive_size_bytes": 512110190592, "C_SystemDrive_free_bytes": 135239876608, ... }` |
+| Disk Health | `windows/<host>/health` | `{ "WDC_WD10EZEX_Slot1_health": "Healthy", "WDC_WD10EZEX_Slot1_operational_status": "OK", "WDC_WD10EZEX_Slot1_media_type": "HDD" }` |
+
+**Disk Metrics** property naming: `<Letter>_<VolumeLabel>_<metric>`
+- Metrics: `size_bytes`, `free_bytes`, `used_bytes`, `used_percent`
+- Volume labels are sanitized (spaces/special chars removed)
+
+**Disk Health** property naming: `<DriveName>_Slot<N>_<property>`
+- Properties: `health` (Healthy/Warning/Unhealthy), `operational_status`, `media_type`
+- Collected in active cycle only (monitor-active.ps1)
 
 ## Home Assistant Integration
 

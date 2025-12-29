@@ -8,7 +8,7 @@
 # ==============================================================================
 
 # MQTT broker hostname or IP address
-$BROKER = "homeassistant.local"
+$BROKER = "192.168.0.102"
 
 # MQTT broker port (typically 1883 for standard, 8883 for TLS)
 $PORT = 1883

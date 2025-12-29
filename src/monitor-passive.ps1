@@ -32,7 +32,7 @@ $failCount = 0
 Write-Host "[INFO] Collecting CPU load..." -ForegroundColor Gray
 $cpuLoad = Get-CpuLoad
 if ($cpuLoad -ne $null) {
-    $topic = "$CPU_TOPIC/load"
+    $topic = "$SYSTEM_TOPIC/cpu_load"
     if (Publish-MqttRetain -Topic $topic -Payload $cpuLoad.ToString()) {
         Write-Host "[OK] CPU load: $cpuLoad %" -ForegroundColor Green
         $successCount++
@@ -46,31 +46,21 @@ if ($cpuLoad -ne $null) {
 }
 
 # ==============================================================================
-# DISK METRICS (lightweight, relatively fast)
+# DISK METRICS (single JSON object)
 # ==============================================================================
 
 Write-Host "[INFO] Collecting disk metrics..." -ForegroundColor Gray
 $disks = Get-DiskMetrics
 
 if ($disks.Count -gt 0) {
-    foreach ($disk in $disks) {
-        $driveLetter = $disk.Drive.Replace(':', '')
-        
-        # Publish only frequently-changing metrics in passive mode
-        $passiveTopics = @(
-            @{ Topic = "$DISK_TOPIC/$driveLetter/free"; Payload = $disk.FreeGB.ToString() }
-            @{ Topic = "$DISK_TOPIC/$driveLetter/used_percent"; Payload = $disk.UsedPercent.ToString() }
-        )
-        
-        foreach ($pub in $passiveTopics) {
-            if (Publish-MqttRetain -Topic $pub.Topic -Payload $pub.Payload) {
-                Write-Host "[OK] $($pub.Topic) = $($pub.Payload)" -ForegroundColor Green
-                $successCount++
-            } else {
-                Write-Host "[ERROR] Failed to publish $($pub.Topic)" -ForegroundColor Red
-                $failCount++
-            }
-        }
+    $diskPayload = Build-DiskPayload -Disks $disks
+    $topic = "$DISK_TOPIC"
+    if (Publish-MqttRetain -Topic $topic -Payload $diskPayload) {
+        Write-Host "[OK] Disk metrics published to $topic" -ForegroundColor Green
+        $successCount++
+    } else {
+        Write-Host \"[ERROR] Failed to publish disk metrics\" -ForegroundColor Red
+        $failCount++
     }
 } else {
     Write-Host "[ERROR] No disk metrics collected" -ForegroundColor Red
