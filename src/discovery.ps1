@@ -73,7 +73,7 @@ $diskSensor = New-HASensor `
     -UniqueId "windows_${sanHost}`_disk_metrics" `
     -StateTopic "$DISK_TOPIC" `
     -JsonAttributesTopic "$DISK_TOPIC" `
-    -ValueTemplate "{{ value_json | tojson }}" `
+    -ValueTemplate "{{ value_json | length }}" `
     -SuggestedDisplayPrecision 0 `
     -Device $device
 
@@ -92,7 +92,7 @@ $healthSensor = New-HASensor `
     -UniqueId "windows_${sanHost}`_disk_health" `
     -StateTopic "$BASE_TOPIC/health" `
     -JsonAttributesTopic "$BASE_TOPIC/health" `
-    -ValueTemplate "{{ value_json | tojson }}" `
+    -ValueTemplate "{{ value_json | length }}" `
     -SuggestedDisplayPrecision 0 `
     -Device $device
 
