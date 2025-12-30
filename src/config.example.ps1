@@ -1,7 +1,7 @@
 # SentryLab-Windows Configuration
 # @file config.ps1
 # @description MQTT and monitoring configuration for SentryLab-Windows
-# @date 2025-12-29
+# @date creation 2025-12-29
 
 # ==============================================================================
 # MQTT BROKER CONFIGURATION

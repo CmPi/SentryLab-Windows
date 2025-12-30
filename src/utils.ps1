@@ -2,7 +2,7 @@
 # @file utils.ps1
 # @author CmPi <cmpi@webe.fr>
 # @brief Global functions for SentryLab-Windows
-# @date 2025-12-29
+# @date creation 2025-12-29
 # @version 1.0.363
 # @usage . "$(Split-Path $PSCommandPath)\utils.ps1"
 # @notes Provides configuration loading, MQTT publishing, and HA discovery helpers

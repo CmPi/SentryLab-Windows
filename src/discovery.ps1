@@ -2,7 +2,7 @@
 # @file discovery.ps1
 # @author CmPi <cmpi@webe.fr>
 # @brief Home Assistant MQTT Discovery for SentryLab-Windows
-# @date 2025-12-29
+# @date creation 2025-12-29
 # @version 1.0.363
 # @usage .\discovery.ps1
 # @notes Publishes HA MQTT discovery payloads for all sensors

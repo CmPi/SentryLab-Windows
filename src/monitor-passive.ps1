@@ -2,7 +2,7 @@
 # @file monitor-passive.ps1
 # @author CmPi <cmpi@webe.fr>
 # @brief Passive monitoring cycle for SentryLab-Windows (lightweight metrics)
-# @date 2025-12-29
+# @date creation 2025-12-29
 # @version 1.0.363
 # @usage .\monitor-passive.ps1
 # @notes Collects lightweight metrics only: CPU load, disk usage (skips CPU temp)

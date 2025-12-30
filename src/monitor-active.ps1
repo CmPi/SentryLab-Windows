@@ -2,7 +2,7 @@
 # @file monitor-active.ps1
 # @author CmPi <cmpi@webe.fr>
 # @brief Active monitoring cycle for SentryLab-Windows (full metrics)
-# @date 2025-12-29
+# @date creation 2025-12-29
 # @version 1.0.363
 # @usage .\monitor-active.ps1
 # @notes Collects all metrics: CPU load, CPU temperature, disk usage
