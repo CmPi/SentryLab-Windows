@@ -6,7 +6,8 @@ A lightweight PowerShell-based monitoring agent for Windows systems that publish
 - **CPU Load** — processor utilization (%)
 - **CPU Temperature** — core temperature in °C (via WMI or LibreHardwareMonitor; skipped in active cycle if neither is available)
   - If WMI does not expose a temperature sensor and LibreHardwareMonitor is not configured/reachable, the temp sensor simply does not publish; other sensors still publish.
-- **Disk Usage** — per-drive size, free space, and usage percentage (GB and %)
+- **Disk Usage** — per-drive size, free space, and usage percentage
+- **Physical Disk Health** — health status and operational status per physical disk (portable across hosts)
 
 ## Architecture
 
@@ -16,14 +17,50 @@ src/
   utils.ps1           — Shared utilities (MQTT publish, metrics collection)
   discovery.ps1       — Home Assistant MQTT Discovery registration
   monitor-passive.ps1 — Lightweight metrics (CPU load + disk usage)
-  monitor-active.ps1  — Full metrics (CPU load + temperature + disk usage)
+  monitor-active.ps1  — Full metrics (CPU load + temperature + disk usage + disk health)
+  decommission.ps1    — Clean up MQTT topics when removing hosts or components
 ```
 
 ### Monitoring Modes
 
-- **Passive** (3–5 min cadence): CPU load + disk metrics. Fast, minimal overhead. Skips CPU temperature.
-- **Active** (15–30 min cadence): Full collection including CPU temperature (more expensive on some hardware).
+- **Passive** (3–5 min cadence): CPU load + disk volume metrics. Fast, minimal overhead.
+- **Active** (15–30 min cadence): Full collection including CPU temperature + physical disk health.
 - **Discovery** (once at startup): Publishes sensor metadata to Home Assistant MQTT Discovery.
+
+### Sensor Architecture
+
+**Host-Specific Sensors** (bound to hostname):
+- CPU load and temperature
+- Volume metrics (C:, D:, E: drives)
+- MQTT topics: `windows/{hostname}/*` and `homeassistant/sensor/{hostname}/*/config`
+
+**Portable Component Sensors** (survive host changes):
+- Physical disk health and operational status
+- Identified by `{manufacturer}_{model}_{serial}` instead of hostname
+- MQTT topics: `homeassistant/sensor/{model}_{serial}_{metric}/config`
+- History preserved when hardware moves between machines
+
+### MQTT Topics
+
+**Data Topics** (values published by monitor scripts):
+```
+windows/{hostname}/system/cpu_load       # CPU utilization (%)
+windows/{hostname}/temp/cpu              # CPU temperature (°C)
+windows/{hostname}/disks                 # JSON: all volume metrics
+windows/{hostname}/health                # JSON: all physical disk health data
+windows/{hostname}/availability          # online/offline
+```
+
+**Discovery Topics** (registered by discovery.ps1):
+```
+homeassistant/sensor/{hostname}/cpu_load/config
+homeassistant/sensor/{hostname}/cpu_temperature/config
+homeassistant/sensor/{hostname}/disk_{drive}_free_bytes/config
+homeassistant/sensor/{hostname}/disk_{drive}_size_bytes/config
+homeassistant/sensor/{hostname}/disk_{drive}_used_percent/config
+homeassistant/sensor/{model}_{serial}_health/config
+homeassistant/sensor/{model}_{serial}_operational_status/config
+```
 
 ## Prerequisites
 
@@ -196,6 +233,62 @@ mqtt:
 ### Automatic (via MQTT Discovery)
 
 Run `discovery.ps1` and sensors will appear under **Settings** → **Devices & Services** → **MQTT**.
+
+## Decommissioning
+
+When removing a monitored host or replacing hardware components, use the decommission script to clean up MQTT topics and Home Assistant entities.
+
+### Host Decommission
+
+Removes all MQTT topics and Home Assistant discovery configs for a complete host:
+
+```powershell
+# Preview what will be deleted
+.\decommission.ps1 -HostName "MyComputer" -WhatIf
+
+# Actually delete (requires confirmation unless -Force is used)
+.\decommission.ps1 -HostName "MyComputer"
+
+# Skip confirmation prompt
+.\decommission.ps1 -HostName "MyComputer" -Force
+```
+
+This removes:
+- All data topics: `windows/{hostname}/*`
+- All discovery configs: `homeassistant/sensor/{hostname}/*/config`
+- All volume sensors (C:, D:, E:, etc.)
+- Legacy formats (old naming conventions with `_slot` suffix)
+- Orphaned/empty retained topics
+
+### Component Decommission
+
+For portable hardware components (physical disks that might move between hosts):
+
+```powershell
+# Remove a specific disk by its component ID (model_serial)
+.\decommission.ps1 -ComponentId "samsung_ssd870_s5r2nf0r123456" -Force
+```
+
+This removes only the 2 discovery topics for that component:
+- `homeassistant/sensor/{componentId}_health/config`
+- `homeassistant/sensor/{componentId}_operational_status/config`
+
+### Host vs Component Architecture
+
+**Host-Specific Sensors** (tied to one machine):
+- CPU load, temperature
+- Volume metrics (C:, D:, E: drive space)
+- Discovery topics: `homeassistant/sensor/{hostname}/{sensor}/config`
+- Use `-HostName` to decommission
+
+**Portable Component Sensors** (survive host changes):
+- Physical disk health and operational status
+- Identified by `{model}_{serial}` instead of hostname
+- Discovery topics: `homeassistant/sensor/{model}_{serial}_{metric}/config`
+- Use `-ComponentId` to decommission
+- History preserved when disk moves to another machine
+
+Example: If you move a Samsung SSD from "PC-A" to "PC-B", its health sensor `samsung_ssd870_s5r2nf0r123456_health` keeps its history in Home Assistant because the unique ID doesn't change.
 
 ## Troubleshooting
 

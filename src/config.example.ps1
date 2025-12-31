@@ -38,6 +38,15 @@ $HOST_NAME = $env:COMPUTERNAME
 # Set to $true to print topics and payloads instead of publishing
 # Use this to test your configuration before sending data to your MQTT broker
 $DEBUG = $false
+
+# ==============================================================================
+# LANGUAGE / TRANSLATIONS
+# ==============================================================================
+
+# Language for sensor labels (en = English, fr = French)
+$LANGUAGE = "en"
+
+# ==============================================================================
 # HOME ASSISTANT DISCOVERY
 # ==============================================================================
 

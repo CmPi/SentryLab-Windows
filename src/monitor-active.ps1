@@ -12,16 +12,9 @@
 #        You can set $MosquittoPubPath in config.ps1 and tune $MQTT_QOS
 #
 
-param(
-    [switch] $Verbose
-)
-
 # Load utilities
 . "$(Split-Path $PSCommandPath)\utils.ps1"
-
-if ($Verbose) {
-    $VerbosePreference = "Continue"
-}
+# Note: do not force global DEBUG/SIMULATE here; respect the early detection above
 
 Write-Host "=== ACTIVE MONITORING CYCLE ===" -ForegroundColor Cyan
 $successCount = 0

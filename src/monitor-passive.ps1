@@ -12,40 +12,30 @@
 #        You can set $MosquittoPubPath in config.ps1 and tune $MQTT_QOS
 #
 
-param(
-    [switch] $Verbose
-)
-
 # Load utilities
 . "$(Split-Path $PSCommandPath)\utils.ps1"
-
-if ($Verbose) {
-    $VerbosePreference = "Continue"
-}
+# Note: do not force global DEBUG/SIMULATE here; respect the early detection above
 
 Write-Host "=== PASSIVE MONITORING CYCLE ===" -ForegroundColor Cyan
 $successCount = 0
 $failCount = 0
 
 # ==============================================================================
-# CPU LOAD (lightweight, always collected)
+# SYSTEM METRICS
 # ==============================================================================
 
 Write-Host "[INFO] Collecting CPU load..." -ForegroundColor Gray
-$cpuLoad = Get-CpuLoad
-if ($cpuLoad -ne $null) {
-    $topic = "$SYSTEM_TOPIC/cpu_load"
-    if (Publish-MqttRetain -Topic $topic -Payload $cpuLoad.ToString()) {
-        Write-Host "[OK] CPU load: $cpuLoad %" -ForegroundColor Green
+
+$payload = Build-SystemPayload -CpuLoad (Get-CpuLoad)
+if ($payload -ne $null) {
+    if (Publish-MqttNoRetain -Topic "$SYSTEM_TOPIC" -Payload $payload) {
         $successCount++
     } else {
-        Write-Host "[ERROR] Failed to publish CPU load" -ForegroundColor Red
         $failCount++
     }
-} else {
-    Write-Host "[ERROR] Failed to get CPU load" -ForegroundColor Red
-    $failCount++
 }
+
+
 
 # ==============================================================================
 # DISK METRICS (single JSON object)
