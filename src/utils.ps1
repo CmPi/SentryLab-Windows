@@ -507,14 +507,16 @@ function Get-VolumeMetrics {
             # Get volume label (friendly name)
             $volumeLabel = if ($disk.VolumeName) { $disk.VolumeName } else { "Drive" }
             
+            # Extract just the drive letter (e.g., "C" from "C:")
+            $driveLetter = $disk.DeviceID -replace '[^A-Za-z0-9]', ''
+            
             Write-Host ""
-            Write-Host $disk.DeviceID.TrimEnd(':\\') -ForegroundColor Cyan
+            Write-Host $driveLetter -ForegroundColor Cyan
             Write-Host $volumeLabel -ForegroundColor Cyan
             Write-Host ""
  
             [PSCustomObject]@{
-                Drive       = $disk.DeviceID.TrimEnd(':\')
-
+                Drive       = $driveLetter
                 VolumeLabel = $volumeLabel
                 SizeBytes   = $sizeBytes
                 FreeBytes   = $freeBytes
@@ -684,14 +686,14 @@ function Build-DiskPayload {
 function Get-DiskHealth {
     <#
     .SYNOPSIS
-    Gets physical disk health status via Get-PhysicalDisk
+    Gets physical disk health status via Get-PhysicalDisk (excludes USB removable drives)
     .OUTPUTS
     Hashtable with disk health info (diskid_health, diskid_operational_status, diskid_media_type)
     #>
     # Try modern API first, then fall back to WMI/CIM if unavailable
     $health = @{}
     try {
-        $disks = Get-PhysicalDisk -ErrorAction Stop
+        $disks = Get-PhysicalDisk -ErrorAction Stop | Where-Object { $_.BusType -ne 'USB' }
         foreach ($disk in $disks) {
             # Safely select model / friendly name
             $modelRaw = $null
@@ -720,9 +722,11 @@ function Get-DiskHealth {
         Write-Host "[WARNING] Get-PhysicalDisk unavailable or failed, falling back to WMI/CIM: $_" -ForegroundColor Yellow
     }
 
-    # WMI/CIM fallback: Win32_DiskDrive
+    # WMI/CIM fallback: Win32_DiskDrive (exclude USB)
+
     try {
-        $wmiDisks = Get-CimInstance Win32_DiskDrive -ErrorAction Stop
+        $wmiDisks = Get-CimInstance Win32_DiskDrive -ErrorAction Stop | 
+            Where-Object { $_.InterfaceType -ne 'USB' }
         foreach ($d in $wmiDisks) {
             $model = Sanitize-Token ($d.Model -or $d.Caption -or 'disk')
             # SerialNumber may be null on some systems; try different properties

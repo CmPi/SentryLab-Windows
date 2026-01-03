@@ -170,7 +170,10 @@ if ($disks.Count -gt 0) {
 # DISK HEALTH (individual sensors per physical disk)
 # ==============================================================================
 
-Write-Host "[INFO] Collecting physical disk health for discovery..." -ForegroundColor Blue
+Write-Host ""
+Write-Host "### Collecting physical disk health for discovery..." -ForegroundColor Blue
+Write-Host ""
+
 $healthData = Get-DiskHealth
 $diskMapping = Get-PhysicalDiskMapping
 
@@ -200,6 +203,7 @@ if ($healthData.Count -gt 0) {
         $healthSensor = New-HASensor `
             -Name "$(Translate 'disk_health') $diskLabel" `
             -UniqueId "${diskId}_health" `
+            -ObjectId "${diskId}_health" `
             -StateTopic "$BASE_TOPIC/health" `
             -ValueTemplate "{{ value_json.${diskId}_health }}" `
             -Device $device
@@ -213,6 +217,7 @@ if ($healthData.Count -gt 0) {
         $opSensor = New-HASensor `
             -Name "$(Translate 'disk_status') $diskLabel" `
             -UniqueId "${diskId}_operational_status" `
+            -ObjectId "${diskId}_operational_status" `
             -StateTopic "$BASE_TOPIC/health" `
             -ValueTemplate "{{ value_json.${diskId}_operational_status }}" `
             -Device $device
