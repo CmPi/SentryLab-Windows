@@ -296,11 +296,14 @@ function Publish-MqttRetain {
     try {
         $qos = if ($MQTT_QOS -is [int] -and $MQTT_QOS -ge 0 -and $MQTT_QOS -le 2) { $MQTT_QOS } else { 1 }
         
-        # Use temp file with UTF-8 no BOM
-        $tempFile = [System.IO.Path]::GetTempFileName()
-        [System.IO.File]::WriteAllText($tempFile, $Payload, [System.Text.UTF8Encoding]::new($false))
+        Write-Host "[DEBUG] Publishing with UTF-8 encoding via stdin" -ForegroundColor Yellow
 
-        & $script:MOSQUITTO_PUB -h $BROKER -p $PORT -u $USER -P $PASS -t $Topic -m $Payload -r -q $qos
+        # Pipe UTF-8 encoded payload to mosquitto_pub using stdin (-l flag)
+        $utf8 = [System.Text.UTF8Encoding]::new($false)
+        $bytes = $utf8.GetBytes($Payload)
+        $utf8String = $utf8.GetString($bytes)
+        
+        $utf8String | & $script:MOSQUITTO_PUB -h $BROKER -p $PORT -u $USER -P $PASS -t $Topic -l -r -q $qos
         
         if ($LASTEXITCODE -eq 0) {
             Write-Host "[INFO] Published (Retain) to $Topic" -ForegroundColor Green
@@ -309,10 +312,6 @@ function Publish-MqttRetain {
             Write-Host "[ERROR] Failed to publish to $Topic (exit code: $LASTEXITCODE)" -ForegroundColor Red
             return $false
         }
-
-        Remove-Item $tempFile -ErrorAction SilentlyContinue
-
-
     }
     catch {
         Write-Host "[CATCH] Exception publishing to $Topic : $_" -ForegroundColor Red
@@ -354,7 +353,12 @@ function Publish-MqttNoRetain {
         Write-Host "[REAL] (simulated) NO-RETAIN: $Topic" -ForegroundColor Cyan
         Write-Host "[REAL] Payload: $Payload" -ForegroundColor Cyan
 
-        & $script:MOSQUITTO_PUB -h $BROKER -p $PORT -u $USER -P $PASS -t $Topic -m $Payload -q $qos
+        # Pipe UTF-8 encoded payload to mosquitto_pub using stdin (-l flag)
+        $utf8 = [System.Text.UTF8Encoding]::new($false)
+        $bytes = $utf8.GetBytes($Payload)
+        $utf8String = $utf8.GetString($bytes)
+        
+        $utf8String | & $script:MOSQUITTO_PUB -h $BROKER -p $PORT -u $USER -P $PASS -t $Topic -l -q $qos
         
         
         if ($LASTEXITCODE -eq 0) {
