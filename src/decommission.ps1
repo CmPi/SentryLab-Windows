@@ -144,22 +144,13 @@ $topicsToDelete += "homeassistant/sensor/$sanHost/cpu_temperature/config"
 if ($HostName -eq $env:COMPUTERNAME) {
     Write-Host "  Enumerating local disks..." -ForegroundColor Gray
     try {
-        $disks = Get-DiskMetrics
+        $disks = Get-VolumeMetrics
         foreach ($disk in $disks) {
             $drive = Sanitize-Token ($disk.Drive)
             # Current format: homeassistant/sensor/{hostname}/disk_{drive}_{metric}/config
             $topicsToDelete += "homeassistant/sensor/$sanHost/disk_${drive}_free_bytes/config"
             $topicsToDelete += "homeassistant/sensor/$sanHost/disk_${drive}_size_bytes/config"
             $topicsToDelete += "homeassistant/sensor/$sanHost/disk_${drive}_used_percent/config"
-            
-            # Legacy: with label in ID
-            $label = Sanitize-Token ($disk.Label)
-            if ($label -and $label -ne "drive") {
-                $diskPrefix = "${drive}_${label}"
-                $topicsToDelete += "homeassistant/sensor/$sanHost/disk_${diskPrefix}_free_bytes/config"
-                $topicsToDelete += "homeassistant/sensor/$sanHost/disk_${diskPrefix}_size_bytes/config"
-                $topicsToDelete += "homeassistant/sensor/$sanHost/disk_${diskPrefix}_used_percent/config"
-            }
         }
         Write-Host "  Found $($disks.Count) volume(s)" -ForegroundColor Gray
     } catch {
@@ -245,27 +236,29 @@ if ($HostName -eq $env:COMPUTERNAME) {
 # Use -ComponentId parameter to explicitly decommission a portable component.
 
 # ==============================================================================
-# 5. QUERY BROKER FOR ANY OTHER TOPICS UNDER HOST NODE
+# 5. QUERY BROKER FOR ALL TOPICS UNDER HOST NODE (using # wildcard)
 # ==============================================================================
-Write-Host "  Querying broker for orphaned topics..." -ForegroundColor Gray
+Write-Host "  Querying broker for all host topics..." -ForegroundColor Gray
 try {
     $job = Start-Job -ScriptBlock {
         param($mqttSub, $broker, $port, $user, $pass, $hostSanitized)
-        & $mqttSub -h $broker -p $port -u $user -P $pass -v -t "homeassistant/sensor/${hostSanitized}/+/config" -W 5 -C 1000 2>$null | 
+        # Use # wildcard to match ALL levels under homeassistant/sensor/{hostname}/
+        & $mqttSub -h $broker -p $port -u $user -P $pass -v -t "homeassistant/sensor/${hostSanitized}/#" -W 5 -C 1000 2>$null | 
             ForEach-Object { 
-                if ($_ -match "^(homeassistant/sensor/${hostSanitized}/[^/\s]+/config)") {
+                # Extract topic from mosquitto_sub verbose output (format: "topic message")
+                if ($_ -match "^(homeassistant/sensor/${hostSanitized}/\S+)") {
                     $matches[1]
                 }
             }
     } -ArgumentList $script:MOSQUITTO_SUB, $BROKER, $PORT, $USER, $PASS, $sanHost
     
-    $orphans = Wait-Job $job -Timeout 7 | Receive-Job
+    $brokerTopics = Wait-Job $job -Timeout 7 | Receive-Job
     Remove-Job $job -Force
     
-    if ($orphans) {
-        $orphans = $orphans | Select-Object -Unique
-        Write-Host "  Found $($orphans.Count) topic(s) in broker" -ForegroundColor Gray
-        foreach ($topic in $orphans) {
+    if ($brokerTopics) {
+        $brokerTopics = $brokerTopics | Select-Object -Unique
+        Write-Host "  Found $($brokerTopics.Count) topic(s) in broker" -ForegroundColor Gray
+        foreach ($topic in $brokerTopics) {
             if ($topicsToDelete -notcontains $topic) {
                 $topicsToDelete += $topic
             }

@@ -64,7 +64,7 @@ if ($cpuTemp -ne $null) {
 # ==============================================================================
 
 Write-Host "[INFO] Collecting disk metrics..." -ForegroundColor Gray
-$disks = Get-DiskMetrics
+$disks = Get-VolumeMetrics
 
 if ($disks.Count -gt 0) {
     $diskPayload = Build-DiskPayload -Disks $disks

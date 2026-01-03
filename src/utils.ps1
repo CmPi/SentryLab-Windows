@@ -481,13 +481,17 @@ function Get-CpuTemperature {
     }
 }
 
-function Get-DiskMetrics {
+function Get-VolumeMetrics {
     <#
     .SYNOPSIS
     Gets disk usage metrics for all fixed logical drives
     .OUTPUTS
     Array of PSCustomObject with Drive, Label, SizeBytes, FreeBytes, UsedBytes, UsedPercent
     #>
+    Write-Host ""
+    Write-Host "### Collecting Volumes metrics ###" -ForegroundColor Blue
+    Write-Host ""
+
     try {
         $disks = Get-CimInstance Win32_LogicalDisk -Filter "DriveType=3" -ErrorAction Stop
         $metrics = foreach ($disk in $disks) {
@@ -502,13 +506,15 @@ function Get-DiskMetrics {
             
             # Get volume label (friendly name)
             $volumeLabel = if ($disk.VolumeName) { $disk.VolumeName } else { "Drive" }
-            # Sanitize label (remove spaces, special chars) for IDs
-            $label = $volumeLabel -replace '[^a-zA-Z0-9_]', ''
-            if ([string]::IsNullOrEmpty($label)) { $label = "Drive" }
             
+            Write-Host ""
+            Write-Host $disk.DeviceID.TrimEnd(':\\') -ForegroundColor Cyan
+            Write-Host $volumeLabel -ForegroundColor Cyan
+            Write-Host ""
+ 
             [PSCustomObject]@{
                 Drive       = $disk.DeviceID.TrimEnd(':\')
-                Label       = $label
+
                 VolumeLabel = $volumeLabel
                 SizeBytes   = $sizeBytes
                 FreeBytes   = $freeBytes
@@ -549,12 +555,115 @@ function Build-SystemPayload {
     return ($payload | ConvertTo-Json -Depth 2 -Compress)
 }
 
+function Get-Removables {
+    <#
+    .SYNOPSIS
+    Detects USB removable drives and collects manufacturer, model, serial number
+    .OUTPUTS
+    Array of PSCustomObject with identification details
+    #>
+    Write-Host ""
+    Write-Host "### Detecting Removable USB Drives ###" -ForegroundColor Blue
+    Write-Host ""
+
+    try {
+        # Get all disk drives with USB interface, skip empty/card readers
+        $usbDrives = Get-CimInstance Win32_DiskDrive -ErrorAction Stop | 
+            Where-Object { $_.InterfaceType -eq "USB" -and $_.Size -gt 0 }
+        
+        if ($usbDrives.Count -eq 0) {
+            Write-Host "[INFO] No USB removable drives detected" -ForegroundColor Gray
+            return @()
+        }
+
+        Write-Host "[INFO] Found $($usbDrives.Count) USB drive(s) with media" -ForegroundColor Green
+        Write-Host ""
+
+        $removables = foreach ($drive in $usbDrives) {
+            Write-Host "=== USB Drive ===" -ForegroundColor Cyan
+            Write-Host "  Caption:        $($drive.Caption)" -ForegroundColor White
+            Write-Host "  Model:          $($drive.Model)" -ForegroundColor White
+            Write-Host "  Manufacturer:   $($drive.Manufacturer)" -ForegroundColor White
+            Write-Host "  SerialNumber:   $($drive.SerialNumber)" -ForegroundColor White
+            Write-Host "  PNPDeviceID:    $($drive.PNPDeviceID)" -ForegroundColor White
+            Write-Host "  InterfaceType:  $($drive.InterfaceType)" -ForegroundColor White
+            Write-Host "  MediaType:      $($drive.MediaType)" -ForegroundColor White
+            Write-Host "  Size:           $([math]::Round($drive.Size / 1GB, 2)) GB" -ForegroundColor White
+            Write-Host "  Partitions:     $($drive.Partitions)" -ForegroundColor White
+            Write-Host "  DeviceID:       $($drive.DeviceID)" -ForegroundColor White
+            
+            # Try to get associated logical drives
+            $partitions = Get-CimInstance Win32_DiskDriveToDiskPartition -ErrorAction SilentlyContinue | 
+                Where-Object { $_.Antecedent.DeviceID -eq $drive.DeviceID }
+            
+            $driveLetters = @()
+            foreach ($partition in $partitions) {
+                $logicalDisks = Get-CimInstance Win32_LogicalDiskToPartition -ErrorAction SilentlyContinue | 
+                    Where-Object { $_.Antecedent.DeviceID -eq $partition.Dependent.DeviceID }
+                foreach ($logicalDisk in $logicalDisks) {
+                    $letter = $logicalDisk.Dependent.DeviceID
+                    $driveLetters += $letter
+                }
+            }
+            
+            if ($driveLetters.Count -gt 0) {
+                Write-Host "  Drive Letters:  $($driveLetters -join ', ')" -ForegroundColor Yellow
+            } else {
+                Write-Host "  Drive Letters:  (none assigned)" -ForegroundColor Gray
+            }
+            
+            # Extract clean identifiers
+            $model = $drive.Model -replace '[^a-zA-Z0-9_]', ''
+            $serial = $drive.SerialNumber -replace '[^a-zA-Z0-9_]', ''
+            $manufacturer = $drive.Manufacturer -replace '[^a-zA-Z0-9_]', ''
+            
+            Write-Host "  --> Sanitized Model:  $model" -ForegroundColor Magenta
+            Write-Host "  --> Sanitized Serial: $serial" -ForegroundColor Magenta
+            Write-Host "  --> Sanitized Mfg:    $manufacturer" -ForegroundColor Magenta
+            
+            # Proposed ID scheme
+            $proposedId = if ($model -and $serial) {
+                "${model}_${serial}".ToLower()
+            } elseif ($model) {
+                "${model}_${manufacturer}".ToLower()
+            } else {
+                "usb_unknown"
+            }
+            Write-Host "  --> Proposed ID:      $proposedId" -ForegroundColor Green
+            Write-Host ""
+            
+            [PSCustomObject]@{
+                Model        = $drive.Model
+                Manufacturer = $drive.Manufacturer
+                SerialNumber = $drive.SerialNumber
+                PNPDeviceID  = $drive.PNPDeviceID
+                InterfaceType = $drive.InterfaceType
+                MediaType    = $drive.MediaType
+                SizeBytes    = $drive.Size
+                Partitions   = $drive.Partitions
+                DeviceID     = $drive.DeviceID
+                DriveLetters = $driveLetters
+                SanitizedModel = $model
+                SanitizedSerial = $serial
+                SanitizedManufacturer = $manufacturer
+                ProposedId   = $proposedId
+            }
+        }
+        
+        return $removables
+    }
+    catch {
+        Write-Host "[ERROR] Failed to detect removable drives: $_" -ForegroundColor Red
+        return @()
+    }
+}
+
 function Build-DiskPayload {
     <#
     .SYNOPSIS
     Builds a single JSON payload with all disk metrics (letter_label_metric format)
     .PARAMETER Disks
-    Array of disk metrics from Get-DiskMetrics
+    Array of disk metrics from Get-VolumeMetrics
     .OUTPUTS
     JSON string
     #>

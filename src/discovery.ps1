@@ -72,13 +72,29 @@ $cfgTopic = "$HA_DISCOVERY_PREFIX/sensor/$sanHost/cpu_load/config"
 Publish-MqttRetain -Topic $cfgTopic -Payload $cpuLoadJson
 
 # ==============================================================================
+# REMOVABLE USB DRIVES DETECTION (for analysis only, not published to MQTT)
+# ==============================================================================
+
+Write-Host ""
+Write-Host "[INFO] Detecting removable USB drives..." -ForegroundColor Blue
+
+$removables = Get-Removables
+
+if ($removables.Count -gt 0) {
+    Write-Host "[INFO] Detected $($removables.Count) removable USB drive(s)" -ForegroundColor Green
+    Write-Host "[INFO] (Analysis only - not published to MQTT at this time)" -ForegroundColor Gray
+} else {
+    Write-Host "[INFO] No removable USB drives detected" -ForegroundColor Gray
+}
+
+# ==============================================================================
 # DISK METRICS (individual sensors per disk)
 # ==============================================================================
 
 Write-Host ""
 Write-Host "[INFO] Collecting disk list for discovery..." -ForegroundColor Blue
 
-$disks = Get-DiskMetrics
+$disks = Get-VolumeMetrics
 
 if ($disks.Count -gt 0) {
     foreach ($disk in $disks) {
@@ -154,7 +170,7 @@ if ($disks.Count -gt 0) {
 # DISK HEALTH (individual sensors per physical disk)
 # ==============================================================================
 
-Write-Host "[INFO] Collecting physical disk health for discovery..." -ForegroundColor Gray
+Write-Host "[INFO] Collecting physical disk health for discovery..." -ForegroundColor Blue
 $healthData = Get-DiskHealth
 $diskMapping = Get-PhysicalDiskMapping
 
@@ -210,42 +226,6 @@ if ($healthData.Count -gt 0) {
     Write-Host "[WARNING] No physical disk health data found" -ForegroundColor Yellow
 }
 
-# ==============================================================================
-# CLEANUP: Remove obsolete sensors (schema evolution)
-# ==============================================================================
-
-Write-Host "[INFO] Cleaning up obsolete discovery topics..." -ForegroundColor Gray
-
-# Remove old "Disk Metrics" counter sensor (replaced by individual disk sensors)
-$oldDiskMetricsTopic = "$HA_DISCOVERY_PREFIX/sensor/$sanHost/disk_metrics/config"
-Write-Host "[INFO] Deleting obsolete topic: $oldDiskMetricsTopic"
-& $script:MOSQUITTO_PUB -h $BROKER -p $PORT -u $USER -P $PASS -t $oldDiskMetricsTopic -n -r -q 1
-
-# Remove old "Disk Health" counter sensor (replaced by individual health sensors)
-$oldDiskHealthTopic = "$HA_DISCOVERY_PREFIX/sensor/$sanHost/disk_health/config"
-Write-Host "[INFO] Deleting obsolete topic: $oldDiskHealthTopic"
-& $script:MOSQUITTO_PUB -h $BROKER -p $PORT -u $USER -P $PASS -t $oldDiskHealthTopic -n -r -q 1
-
-# Remove old disk sensors with incorrect suffixes (before harmonization with Proxmox)
-Write-Host "[INFO] Collecting current disks for cleanup of old configs..."
-$currentDisks = Get-DiskMetrics
-foreach ($disk in $currentDisks) {
-    $drive = Sanitize-Token ($disk.Drive)
-    $label = Sanitize-Token ($disk.Label)
-    $diskPrefix = "${drive}_${label}"
-    
-    # Old suffixes: _free, _size, _used_pct (incorrect)
-    $oldTopics = @(
-        "$HA_DISCOVERY_PREFIX/sensor/$sanHost/disk_${diskPrefix}_free/config",
-        "$HA_DISCOVERY_PREFIX/sensor/$sanHost/disk_${diskPrefix}_size/config",
-        "$HA_DISCOVERY_PREFIX/sensor/$sanHost/disk_${diskPrefix}_used_pct/config"
-    )
-    
-    foreach ($oldTopic in $oldTopics) {
-        Write-Host "[INFO] Deleting obsolete disk config: $oldTopic"
-        & $script:MOSQUITTO_PUB -h $BROKER -p $PORT -u $USER -P $PASS -t $oldTopic -n -r -q 1
-    }
-}
-
 Write-Host "[INFO] Discovery complete" -ForegroundColor Green
+
 exit 0
